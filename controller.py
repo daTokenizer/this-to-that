@@ -1,12 +1,14 @@
 import importlib
 import logging
+import argparse
 import json
 import yaml
-import os
+import sys
 from typing import Dict, Any, List, Iterable, Optional, Tuple
 from abc import ABC, abstractmethod
 
 CONF_FILE_PATH = "config.yml"
+LOG_FILE_PATH = "etl_controller.log"
 MISSING_DATA_DEFAULT_VALUE = None
 FIXED_CUSTOM_VALUE_KEY = "FIXED_CUSTOM_VALUE"
 
@@ -299,17 +301,27 @@ class ETLController:
                 logger.info("Closing target connection")
                 self.target.close()
 
-
-# Example usage
-if __name__ == "__main__":
-    import sys
+def main():
+    """Main entry point for the ETL controller."""
+    parser = argparse.ArgumentParser(description='ETL Controller')
+    parser.add_argument('--config', '-c', 
+                       default=CONF_FILE_PATH,
+                       help='Path to configuration file')
+    parser.add_argument('--log-file', '-l',
+                       default=LOG_FILE_PATH,
+                       help='Path to log file')
     
-    if len(sys.argv) < 2:
-        print("Usage: python etl_controller.py <config_file>")
-        sys.exit(1)
+    args = parser.parse_args()
     
-    config_path = sys.argv[1] if len(sys.argv) == 2 else CONF_FILE_PATH
-    controller = ETLController(config_path)
+    # Configure logging if log file specified
+    if args.log_file:
+        logging.basicConfig(
+            filename=args.log_file,
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+    
+    controller = ETLController(args.config)
     
     try:
         processed_count = controller.run()
@@ -318,3 +330,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"ETL process failed: {e}")
         sys.exit(1)
+
+# Example usage
+if __name__ == "__main__":
+    main()
