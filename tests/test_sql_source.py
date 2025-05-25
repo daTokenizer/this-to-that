@@ -1,12 +1,17 @@
+import os
 import pytest
 from sqlalchemy import create_engine, text, MetaData, Table, Column, Integer, String, DateTime
 from datetime import datetime
-from sources.sql_source import SQLSource
+from sources.sql import SQLSource
 
 @pytest.fixture
-def test_engine():
-    """Create an in-memory SQLite database for testing."""
-    engine = create_engine('sqlite:///:memory:')
+def test_db_path(tmp_path):
+    return str(tmp_path / "test_sql_source.db")
+
+@pytest.fixture
+def test_engine(test_db_path):
+    """Create a file-based SQLite database for testing."""
+    engine = create_engine(f'sqlite:///{test_db_path}')
     metadata = MetaData()
     
     # Create test table
@@ -28,19 +33,22 @@ def test_engine():
         ])
         conn.commit()
     
-    return engine
+    yield engine
+    engine.dispose()
+    if os.path.exists(test_db_path):
+        os.remove(test_db_path)
 
 @pytest.fixture
 def sql_source():
     """Create a SQL source instance."""
     return SQLSource()
 
-def test_sql_source_initialization(sql_source):
+def test_sql_source_initialization(sql_source, test_db_path):
     """Test SQL source initialization with connection details."""
     config = {
         'connection': {
             'dialect': 'sqlite',
-            'database': ':memory:'
+            'database': test_db_path
         },
         'query': 'SELECT * FROM users',
         'params': {}
@@ -51,11 +59,11 @@ def test_sql_source_initialization(sql_source):
     assert sql_source.query == 'SELECT * FROM users'
     assert sql_source.params == {}
 
-def test_sql_source_initialization_with_url(sql_source):
+def test_sql_source_initialization_with_url(sql_source, test_db_path):
     """Test SQL source initialization with connection URL."""
     config = {
         'connection': {
-            'url': 'sqlite:///:memory:'
+            'url': f'sqlite:///{test_db_path}'
         },
         'query': 'SELECT * FROM users',
         'params': {}
@@ -64,12 +72,12 @@ def test_sql_source_initialization_with_url(sql_source):
     sql_source.initialize(config)
     assert sql_source.engine is not None
 
-def test_sql_source_initialization_missing_query(sql_source):
+def test_sql_source_initialization_missing_query(sql_source, test_db_path):
     """Test SQL source initialization with missing query."""
     config = {
         'connection': {
             'dialect': 'sqlite',
-            'database': ':memory:'
+            'database': test_db_path
         },
         'params': {}
     }
@@ -77,11 +85,11 @@ def test_sql_source_initialization_missing_query(sql_source):
     with pytest.raises(ValueError, match="No query specified"):
         sql_source.initialize(config)
 
-def test_sql_source_get_entries(sql_source, test_engine):
+def test_sql_source_get_entries(sql_source, test_engine, test_db_path):
     """Test retrieving entries from SQL source."""
     config = {
         'connection': {
-            'url': 'sqlite:///:memory:'
+            'url': f'sqlite:///{test_db_path}'
         },
         'query': 'SELECT * FROM users',
         'params': {}
@@ -95,11 +103,11 @@ def test_sql_source_get_entries(sql_source, test_engine):
     assert entries[1]['email'] == 'jane@example.com'
     assert entries[2]['id'] == 3
 
-def test_sql_source_get_entries_with_params(sql_source, test_engine):
+def test_sql_source_get_entries_with_params(sql_source, test_engine, test_db_path):
     """Test retrieving entries with query parameters."""
     config = {
         'connection': {
-            'url': 'sqlite:///:memory:'
+            'url': f'sqlite:///{test_db_path}'
         },
         'query': 'SELECT * FROM users WHERE created_at > :start_date',
         'params': {
@@ -119,11 +127,11 @@ def test_sql_source_get_entries_not_initialized(sql_source):
     with pytest.raises(RuntimeError, match="SQL source not initialized"):
         sql_source.get_entries()
 
-def test_sql_source_close(sql_source):
+def test_sql_source_close(sql_source, test_db_path):
     """Test closing SQL source connection."""
     config = {
         'connection': {
-            'url': 'sqlite:///:memory:'
+            'url': f'sqlite:///{test_db_path}'
         },
         'query': 'SELECT * FROM users',
         'params': {}
