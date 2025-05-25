@@ -2,8 +2,8 @@ import importlib
 import logging
 import argparse
 import json
-import yaml
 import sys
+import yaml
 from typing import Dict, Any, List, Iterable, Optional, Tuple
 from abc import ABC, abstractmethod
 
@@ -136,6 +136,29 @@ def map_data_for_target(source_asset_data: dict, mapping: dict|None):
 
     return mapped_data
 
+def try_load_module(module_name: str, module_path: str, class_name: str) -> Optional[DataSource]:
+    """Load and initialize the class specified in the config."""
+    try:
+        
+        logger.info(f"Loading module: {module_name} from {module_path}")
+        source_module = importlib.import_module(module_path)
+        
+        if not source_module:
+            logger.error(f"Failed to load module: {module_name}")
+            return None
+        
+        source_class = getattr(source_module, class_name)
+        source = source_class()
+
+        if not source:
+            logger.error(f"Failed to load {module_name}")
+            return None
+
+        return source
+    except Exception as e:
+        logger.error(f"Failed to load {module_name}: {e}")
+        return None
+
 def load_source(source_name: str, params: Dict[str, Any]) -> DataSource:
     """Load and initialize the data source specified in the config."""
     
@@ -144,15 +167,23 @@ def load_source(source_name: str, params: Dict[str, Any]) -> DataSource:
         raise ValueError("Source name not specified in config")
     
     try:
-        logger.info(f"Loading source module: {source_name}")
-        module_path = f"sources.{source_name}"
-        source_module = importlib.import_module(module_path)
-        source_class = getattr(source_module, f"{source_name.capitalize()}Source")
+        source_class_name = f"{source_name.capitalize()}Source"
+        source = try_load_module(source_name, module_path=f"sources.{source_name}", class_name=source_class_name)
+        if not source:
+            source = try_load_module(source_name, module_path=f"sources.{source_name}_source", class_name=source_class_name)
         
-        source = source_class()
-        logger.info(f"Initializing source: {source_name}")
-        source.initialize(params)
+        if not source:
+            logger.error(f"Failed to find source {source_name}")
+            raise ImportError(f"Failed to find source {source_name}")
+        else:
+            if hasattr(source, "initialize"):
+                logger.info(f"Initializing {source_name}")
+                source.initialize(params)
+            else:
+                logger.debug(f"No initialize method found for {source_name}")
+
         return source
+
     except Exception as e:
         logger.error(f"Failed to load source {source_name}: {e}")
         raise ImportError(f"Failed to load source {source_name}: {e}")
@@ -164,15 +195,21 @@ def load_target(target_name: str, params: Dict[str, Any]) -> DataTarget:
         raise ValueError("Target name not specified in config")
     
     try:
-        logger.info(f"Loading target module: {target_name}")
-        module_path = f"targets.{target_name}"
-        target_module = importlib.import_module(module_path)
-        print("XXXX", target_module)
-        target_class = getattr(target_module, f"{target_name.capitalize()}Target")
+        target_class_name = f"{target_name.capitalize()}Target"
+        target = try_load_module(target_name, module_path=f"targets.{target_name}", class_name=target_class_name)
+        if not target:
+            target = try_load_module(target_name, module_path=f"targets.{target_name}_target", class_name=target_class_name)
         
-        target = target_class()
-        logger.info(f"Initializing target: {target_name}")
-        target.initialize(params)
+        if not target:
+            logger.error(f"Failed to find target {target_name}")
+            raise ImportError(f"Failed to find target {target_name}")
+        else:
+            if hasattr(target, "initialize"):
+                logger.info(f"Initializing target: {target_name}")
+                target.initialize(params)
+            else:
+                logger.debug(f"No initialize method found for {target_name}")
+
         return target
     except Exception as e:
         logger.error(f"Failed to load target {target_name}: {e}")
@@ -186,14 +223,18 @@ def load_transformation(transformation_name: str, params: Dict[str, Any]) -> Tra
         params = {}
         
     try:
-        logger.info(f"Loading transformation module: {transformation_name}")
-        module_path = f"transformations.{transformation_name}"
-        transform_module = importlib.import_module(module_path)
-        transform_class = getattr(transform_module, f"{transformation_name.capitalize()}Transformation")
-        
-        transformation = transform_class()
-        logger.info(f"Initializing transformation: {transformation_name}")
-        transformation.initialize(params)
+        transformation_class_name = f"{transformation_name.capitalize()}Transformation"
+        transformation = try_load_module(transformation_name, module_path=f"transformations.{transformation_name}", class_name=transformation_class_name)
+        if not transformation:
+            logger.error(f"Failed to find transformation {transformation_name}")
+            raise ImportError(f"Failed to find transformation {transformation_name}")
+        else:
+            if hasattr(transformation, "initialize"):
+                logger.info(f"Initializing transformation: {transformation_name}")
+                transformation.initialize(params)
+            else:
+                logger.debug(f"No initialize method found for {transformation_name}")
+
         return transformation
     except Exception as e:
         logger.error(f"Failed to load transformation {transformation_name}: {e}")
