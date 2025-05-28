@@ -375,6 +375,5 @@ def main():
         print(f"ETL process failed: {e}")
         sys.exit(1)
 
-# Example usage
 if __name__ == "__main__":
     main()

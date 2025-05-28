@@ -1,7 +1,7 @@
 import unittest
 from typing import Dict, Any
 from transformers.identity import IdentityTransformation
-from transformations.map import MapTransformation
+from transformers.map import MapTransformation
 from controller import MISSING_DATA_DEFAULT_VALUE, FIXED_CUSTOM_VALUE_KEY
 
 class TestIdentityTransformation(unittest.TestCase):
