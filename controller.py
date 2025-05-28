@@ -167,10 +167,11 @@ def load_source(source_name: str, params: Dict[str, Any]) -> DataSource:
         raise ValueError("Source name not specified in config")
     
     try:
+        sources_module_path = "sources"
         source_class_name = f"{source_name.capitalize()}Source"
-        source = try_load_module(source_name, module_path=f"sources.{source_name}", class_name=source_class_name)
+        source = try_load_module(source_name, module_path=f"{sources_module_path}.{source_name}", class_name=source_class_name)
         if not source:
-            source = try_load_module(source_name, module_path=f"sources.{source_name}_source", class_name=source_class_name)
+            source = try_load_module(source_name, module_path=f"{sources_module_path}.{source_name}_source", class_name=source_class_name)
         
         if not source:
             logger.error(f"Failed to find source {source_name}")
@@ -195,10 +196,11 @@ def load_target(target_name: str, params: Dict[str, Any]) -> DataTarget:
         raise ValueError("Target name not specified in config")
     
     try:
+        targets_module_path = "targets"
         target_class_name = f"{target_name.capitalize()}Target"
-        target = try_load_module(target_name, module_path=f"targets.{target_name}", class_name=target_class_name)
+        target = try_load_module(target_name, module_path=f"{targets_module_path}.{target_name}", class_name=target_class_name)
         if not target:
-            target = try_load_module(target_name, module_path=f"targets.{target_name}_target", class_name=target_class_name)
+            target = try_load_module(target_name, module_path=f"{targets_module_path}.{target_name}_target", class_name=target_class_name)
         
         if not target:
             logger.error(f"Failed to find target {target_name}")
@@ -223,8 +225,9 @@ def load_transformation(transformation_name: str, params: Dict[str, Any]) -> Tra
         params = {}
         
     try:
+        transformations_module_path = "transformers"
         transformation_class_name = f"{transformation_name.capitalize()}Transformation"
-        transformation = try_load_module(transformation_name, module_path=f"transformations.{transformation_name}", class_name=transformation_class_name)
+        transformation = try_load_module(transformation_name, module_path=f"{transformations_module_path}.{transformation_name}", class_name=transformation_class_name)
         if not transformation:
             logger.error(f"Failed to find transformation {transformation_name}")
             raise ImportError(f"Failed to find transformation {transformation_name}")

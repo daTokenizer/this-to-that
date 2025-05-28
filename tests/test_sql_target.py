@@ -39,11 +39,26 @@ def test_sql_target_initialization(sql_target, test_db_path):
         },
         'batch_size': 100
     }
-    
+    print(test_db_path)
+
     sql_target.initialize(config)
+    
+    # Verify engine was created and connected
     assert sql_target.engine is not None
+    assert sql_target.engine.dialect.name == 'sqlite'
+    
+    # Verify table was created with correct schema
     assert sql_target.table is not None
+    assert sql_target.table.name == 'test_table'
+    assert len(sql_target.table.columns) == 3
+    
+    # Verify batch size was set
     assert sql_target.batch_size == 100
+    
+    # Verify table exists in database
+    metadata = MetaData()
+    metadata.reflect(bind=sql_target.engine)
+    assert 'test_table' in metadata.tables
 
 def test_sql_target_initialization_with_url(sql_target, test_db_path):
     """Test SQL target initialization with connection URL."""

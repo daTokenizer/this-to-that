@@ -1,0 +1,42 @@
+# Example configuration for endpoint source and target
+# This example fetches user data from a REST API and sends it to another endpoint
+
+source:
+  name: endpoint
+  params:
+    # Source API configuration
+    base_url: "https://api.example.com"
+    endpoint: "/users"
+    headers:
+      Authorization: "Bearer source_api_token"
+      Accept: "application/json"
+    params:
+      limit: 100
+      status: "active"
+    auth:
+      - "source_username"
+      - "source_password"
+    verify_ssl: true
+    timeout: 30
+
+target:
+  name: endpoint
+  params:
+    # Target API configuration
+    base_url: "https://api.target.com"
+    endpoint: "/users/sync"
+    headers:
+      Authorization: "Bearer target_api_token"
+      Content-Type: "application/json"
+    auth:
+      - "target_username"
+      - "target_password"
+    verify_ssl: true
+    timeout: 30
+    method: "POST"
+    batch_size: 50  # Process 50 users at a time
+
+# Optional transformation configuration
+transformation:
+  name: identity  # Use identity transformation if no data transformation needed
+  params: {}  # No parameters needed for identity transformation 

@@ -1,0 +1,55 @@
+source:
+  name: sql
+  params:
+    connection:
+      dialect: postgresql
+      username: myuser
+      password: mypassword
+      host: localhost
+      port: 5432
+      database: sourcedb
+    query: |
+      SELECT 
+        id,
+        name,
+        email,
+        created_at
+      FROM users
+      WHERE created_at > :start_date
+    params:
+      start_date: '2024-01-01'
+
+target:
+  name: sql
+  params:
+    connection:
+      dialect: mysql
+      username: targetuser
+      password: targetpass
+      host: targetdb.example.com
+      port: 3306
+      database: targetdb
+    table:
+      name: processed_users
+      schema: etl
+      columns:
+        - name: user_id
+          type: integer
+          primary_key: true
+        - name: full_name
+          type: string
+        - name: email_address
+          type: string
+        - name: process_date
+          type: string
+    batch_size: 500
+
+transformation:
+  name: map
+  params:
+    mapping:
+      user_id: id
+      full_name: name
+      email_address: email
+      process_date:
+        FIXED_CUSTOM_VALUE: "{{ current_date }}" 

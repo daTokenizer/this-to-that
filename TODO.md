@@ -5,11 +5,12 @@
 - [ ] compose config files via some WebUI
 - [ ] be able to deploy these ETLs via said WebUI side by side
 
-## New Sources/Targets
-- [ ] Postgres
+## New Modules
+- [x] Postgres/sqlite
+- [x] jsonconverter transformer
 - [ ] Redis
 - [ ] Mongo
-- [ ] URL endpoint
+- [x] URL endpoint
 
 
 ## Known Limitations

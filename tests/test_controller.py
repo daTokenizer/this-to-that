@@ -7,7 +7,7 @@ import uuid
 import random
 
 from controller import ETLController, MISSING_DATA_DEFAULT_VALUE
-from transformations.identity import IdentityTransformation
+from transformers.identity import IdentityTransformation
 from transformations.map import MapTransformation
 
 from sources.test import TestSource as MockSource

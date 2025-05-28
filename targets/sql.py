@@ -69,10 +69,11 @@ class SQLTarget(DataTarget):
                     else:
                         connection_url = f"{dialect}://{host}"
                     
-                    if port:
-                        connection_url += f":{port}"
                     if database:
                         connection_url += f"/{database}"
+                
+                if port:
+                    connection_url += f":{port}"
             
             # Create engine
             self.engine = create_engine(connection_url)
@@ -119,7 +120,7 @@ class SQLTarget(DataTarget):
             
             # Log connection info
             if 'url' in conn_config:
-                logger.info(f"Initialized SQL target with connection URL")
+                logger.info(f"Initialized SQL target with connection URL: {connection_url}")
             else:
                 logger.info(f"Initialized SQL target with connection to {host}")
             
