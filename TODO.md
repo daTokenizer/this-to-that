@@ -4,7 +4,7 @@
 - [ ] package in a container (that pulls config from outside and externelize some metrics somehow)
 - [ ] compose config files via some WebUI
 - [ ] be able to deploy these ETLs via said WebUI side by side
-- [ ] turn JsonConverter() functional
+- [X] turn JsonConverter() functional
 
 ## New Modules
 - [x] Postgres/sqlite

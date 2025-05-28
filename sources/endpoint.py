@@ -1,6 +1,6 @@
 import logging
 import requests
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from urllib.parse import urljoin
 import json
 
