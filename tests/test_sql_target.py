@@ -1,7 +1,6 @@
 import os
 import pytest
-from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, DateTime, select
-from datetime import datetime
+from sqlalchemy import create_engine, MetaData, select
 from targets.sql import SQLTarget
 
 @pytest.fixture
