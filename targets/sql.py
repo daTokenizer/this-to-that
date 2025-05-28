@@ -1,5 +1,5 @@
 from typing import Dict, Any, Iterable
-from sqlalchemy import create_engine, text, Table, MetaData, Column, String, Integer
+from sqlalchemy import create_engine, Table, MetaData, Column, String, Integer
 from sqlalchemy.exc import SQLAlchemyError
 import logging
 from controller import DataTarget
