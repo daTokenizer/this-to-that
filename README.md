@@ -145,4 +145,115 @@ pytest -v
 
 ## Support
 
-For support, please [open an issue](https://github.com/yourusername/pyetl/issues) or contact [your contact information]. 
+For support, please [open an issue](https://github.com/yourusername/pyetl/issues) or contact [your contact information].
+
+# Containerized ETL System
+
+This ETL (Extract, Transform, Load) system is containerized using Docker for easy deployment and management. The system includes automatic log rotation and management to prevent disk space issues.
+
+## Prerequisites
+
+- Docker installed on your system
+- A valid ETL configuration file (YAML format)
+- Sufficient disk space for logs (recommended: at least 1GB)
+
+## Quick Start
+
+1. Build the Docker image:
+```bash
+docker build -t etl-container .
+```
+
+2. Run the ETL process:
+```bash
+docker run -v /path/to/logs:/var/log/etl \
+          -v /path/to/config.yml:/app/config.yml \
+          etl-container config.yml
+```
+
+## Configuration
+
+### Volume Mounts
+
+The container requires two volume mounts:
+
+1. Log Directory:
+   - Host path: `/path/to/logs`
+   - Container path: `/var/log/etl`
+   - Purpose: Stores all ETL logs with automatic rotation
+
+2. Config File:
+   - Host path: `/path/to/config.yml`
+   - Container path: `/app/config.yml`
+   - Purpose: Provides ETL configuration
+
+### Log Management
+
+- Logs are stored in the mounted volume at `/path/to/logs`
+- Daily log rotation is enabled
+- Logs are kept for 7 days
+- Old logs are automatically compressed
+- Log files are named with the format: `etl_YYYYMMDD.log`
+
+## Example Usage
+
+### Basic Run
+```bash
+docker run -v $(pwd)/logs:/var/log/etl \
+          -v $(pwd)/config.yml:/app/config.yml \
+          etl-container config.yml
+```
+
+### Run with Custom Log Directory
+```bash
+docker run -v /var/log/my-etl:/var/log/etl \
+          -v $(pwd)/config.yml:/app/config.yml \
+          etl-container config.yml
+```
+
+## Log Rotation Configuration
+
+The system uses logrotate with the following settings:
+- Daily rotation
+- 7 days of log retention
+- Automatic compression of old logs
+- Log files are created with 0640 permissions
+
+## Troubleshooting
+
+1. **Container fails to start**
+   - Ensure the config file exists and is properly mounted
+   - Check file permissions on the log directory
+   - Verify the config file is valid YAML
+
+2. **No logs appearing**
+   - Check if the log directory is properly mounted
+   - Verify write permissions on the log directory
+   - Check container logs using `docker logs <container-id>`
+
+3. **Disk space issues**
+   - Logs are automatically rotated and compressed
+   - Old logs are automatically removed after 7 days
+   - Monitor disk usage in the log directory
+
+## Security Considerations
+
+- Log files are created with restricted permissions (0640)
+- The container runs with minimal privileges
+- Sensitive data in logs should be properly handled in the ETL configuration
+
+## Maintenance
+
+To clean up old containers and images:
+
+```bash
+# Remove stopped containers
+docker container prune
+
+# Remove unused images
+docker image prune
+```
+
+## Support
+
+For issues or questions, please check the project documentation or create an issue in the repository. 
