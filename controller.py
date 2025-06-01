@@ -105,14 +105,25 @@ def validate_config(config: Dict[str, Any]) -> bool:
         logger.error("must provide source name under key: \"name\" in the \"source\" section")
         return False
     
-    source = config.get('target')
-    if not source:
+    target = config.get('target')
+    if not target:
         logger.error("must provide target data under key: \"target\"")
         return False
-    source_name = source.get('name')
-    if not source_name:
+    target_name = target.get('name')
+    if not target_name:
         logger.error("must provide target name under key: \"name\" in the \"target\" section")
         return False
+    
+
+    if "transformation" in config:
+        transformation = config.get('transformation')
+        if not isinstance(transformation, dict):
+            logger.error("transformation must be a dictionary")
+            return False
+        transformation_name = transformation.get('name')
+        if not transformation_name:
+            logger.error("must provide transformation name under key: \"name\" in the \"transformation\" section")
+            return False
     
     return True
 
