@@ -11,7 +11,7 @@ from typing import Dict, Any
 def sample_config():
     return {
         "source": {
-            "name": "crowdstrike",
+            "name": "test",
             "params": {
                 "auth_url": "https://auth.example.com",
                 "client_id": "test_client",
@@ -21,7 +21,7 @@ def sample_config():
             }
         },
         "target": {
-            "name": "sepio",
+            "name": "test",
             "params": {
                 "sepio_url": "https://sepio.example.com/api",
                 "batch_size": 100,
@@ -29,12 +29,17 @@ def sample_config():
                 "max_retries": 3
             }
         },
-        "mapping": {
-            "target_id": "source_id",
-            "target_name": "hostname",
-            "target_mac": "mac_address", 
-            "target_type": {
-                "value": "device"
+        "transformation": {
+            "name": "map",
+            "params": {
+                "mapping": {
+                    "target_id": "source_id",
+                    "target_name": "hostname",
+                    "target_mac": "mac_address",
+                    "target_type": {
+                        "value": "device"
+                    }
+                }
             }
         }
     }

@@ -186,13 +186,13 @@ def test_run_handles_import_error(mock_import, sample_config_dict):
         config_path = config_file.name
         
         try:
-            controller = ETLController(config_path)
-            with pytest.raises(ImportError):
+            with pytest.raises(ValueError):
+                controller = ETLController(config_path)
                 controller.run()
 
-            assert controller.source is None
-            assert controller.transformation is None
-            assert controller.target is None
+                assert controller.source is None
+                assert controller.transformation is None
+                assert controller.target is None
         
         finally:
             if os.path.exists(config_path):
@@ -428,9 +428,8 @@ def test_load_transformation_error(mock_import, sample_config_dict):
         config_path = config_file.name
     
     try:
-        controller = ETLController(config_path)
-        with pytest.raises(ImportError):
-            controller._load_transformation()
+        with pytest.raises(ValueError):
+            ETLController(config_path)
     finally:
         if os.path.exists(config_path):
             os.remove(config_path)

@@ -9,7 +9,7 @@ from controller import load_config, validate_config
 def sample_config():
     return {
         "source": {
-            "name": "test_source",
+            "name": "test",
             "params": {
                 "auth": {
                     "auth_url": "https://auth.example.com",
@@ -24,11 +24,11 @@ def sample_config():
             }
         },
         "target": {
-            "name": "test_target",
+            "name": "test",
             "params": {}
         },
         "transformation": {
-            "name": "test_transformation",
+            "name": "identity",
             "params": {}
         },
     }

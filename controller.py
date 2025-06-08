@@ -3,6 +3,8 @@ import logging
 import argparse
 import json
 import sys
+from symtable import Class
+
 import yaml
 from typing import Dict, Any, List, Iterable, Optional, Tuple
 from abc import ABC, abstractmethod
@@ -11,6 +13,7 @@ CONF_FILE_PATH = "config.yml"
 LOG_FILE_PATH = "etl_controller.log"
 MISSING_DATA_DEFAULT_VALUE = None
 FIXED_CUSTOM_VALUE_KEY = "FIXED_CUSTOM_VALUE"
+DEFAULT_TRANSFORMATION_NAME = "identity"
 
 # Configure logging
 logging.basicConfig(
@@ -90,7 +93,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
         logger.error(f"Failed to load config file: {e}")
         raise
 
-def validate_config(config: Dict[str, Any]) -> bool:
+def validate_config_structure(config: Dict[str, Any]) -> bool:
     if not config:
         return False
 
@@ -127,6 +130,44 @@ def validate_config(config: Dict[str, Any]) -> bool:
     
     return True
 
+def validate_modules_exist(config: Dict[str, Any]) -> bool:
+    """Check if the specified source, target, and transformation modules exist."""
+    try:
+        source_name = config.get('source', {}).get('name')
+        if not try_get_source_class(source_name):
+            logger.error(f"Could not find source {source_name}")
+            return False
+
+        target_name = config.get('target', {}).get('name')
+        if not try_get_target_class(target_name):
+            logger.error(f"Could not find target {target_name}")
+            return False
+
+        transformation_name = config.get('transformation', {}).get('name', 'identity')
+        if not try_get_transformation_class(transformation_name):
+            logger.error(f"Could not find transformation {transformation_name}")
+            return False
+    except Exception as e:
+        logger.error(f"failed to validate existence of requested modules: {e}")
+        return False
+
+    return True
+
+def validate_config(config: Dict[str, Any]) -> bool:
+    if not config or not isinstance(config, dict):
+        return False
+
+    if not validate_config_structure(config):
+        logger.error("Invalid configuration structure")
+        return False
+
+    logger.error(f"XXX {config}")
+    if not validate_modules_exist(config):
+        logger.error("Required modules do not exist")
+        return False
+
+    return True
+
 def map_data_for_target(source_asset_data: dict, mapping: dict|None):
     if not mapping:
         return source_asset_data
@@ -147,52 +188,105 @@ def map_data_for_target(source_asset_data: dict, mapping: dict|None):
 
     return mapped_data
 
-def try_load_module(module_name: str, module_path: str, class_name: str) -> Optional[DataSource]:
-    """Load and initialize the class specified in the config."""
+def try_get_module_class_from_path(module_name: str, module_path: str, class_name: str) -> Optional[Class]:
     try:
-        
         logger.info(f"Loading module: {module_name} from {module_path}")
-        source_module = importlib.import_module(module_path)
-        
-        if not source_module:
+        module = importlib.import_module(module_path)
+
+        if not module:
             logger.error(f"Failed to load module: {module_name}")
             return None
-        
-        source_class = getattr(source_module, class_name)
-        source = source_class()
 
-        if not source:
-            logger.error(f"Failed to load {module_name}")
+        if not hasattr(module, class_name):
+            logger.info(f"Class {class_name} not found in module {module_path}")
             return None
 
-        return source
+        return getattr(module, class_name)
     except Exception as e:
-        logger.error(f"Failed to load {module_name}: {e}")
+        logger.error(f"Failed to get class {class_name} from {module_path}: {e}")
         return None
+
+
+
+def try_get_module_class(module_type:str, module_name: str) -> Optional[Class]:
+    """Try to get the source class from the specified module."""
+    try:
+        logger.debug(f"trying to get class for {module_type} called {module_name}")
+        module_class_name = f"{module_name.capitalize()}{module_type.capitalize()}"
+        module_module_path = f"{module_type.lower()}s"
+        module_paths = [
+            f"{module_module_path}.{module_name.lower()}",
+            f"{module_module_path}.{module_name.lower()}_{module_type}"
+        ]
+        for path in module_paths:
+            module_class = try_get_module_class_from_path(module_name, path, module_class_name)
+            if module_class:
+                return module_class
+
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get target class: {e}")
+        return None
+
+def try_get_source_class(source_name: str) -> Optional[Class]:
+    """Try to get the source class from the specified module."""
+    return try_get_module_class(module_type="source", module_name=source_name)
+
+def try_get_target_class(target_name: str) -> Optional[Class]:
+    """Try to get the source class from the specified module."""
+    return try_get_module_class(module_type="target", module_name=target_name)
+
+def try_get_transformation_class(transformation_name: str) -> Optional[Class]:
+    """Try to get the source class from the specified module."""
+    if not transformation_name:
+        logger.warning(f"No transformation specified, using default transformation: {DEFAULT_TRANSFORMATION_NAME}")
+        transformation_name = DEFAULT_TRANSFORMATION_NAME
+
+    transformations_module_dir = "transformers"
+    transformations_module_path = f"{transformations_module_dir}.{transformation_name}"
+    transformation_class_name = f"{transformation_name.capitalize()}Transformation"
+    transformation_class = try_get_module_class_from_path(
+        transformation_name,
+        module_path=transformations_module_path,
+        class_name=transformation_class_name
+    )
+
+    return transformation_class
+
+def try_instantiate_module(module_type:str, module_name:str, module_class: Class, params: Dict[str, Any]) -> Optional[DataSource|Transformation|DataTarget]:
+    if not module_class:
+        logger.error(f"Failed to find {module_type} {module_name}")
+        raise ImportError(f"Failed to find {module_type} {module_name}")
+
+    module_instance = module_class()
+
+    if not module_instance:
+        logger.error(f"Failed to load {module_type} {module_name}")
+        raise ImportError(f"Failed to load {module_type} {module_name}")
+    else:
+        if hasattr(module_instance, "initialize"):
+            logger.info(f"Initializing {module_type}: {module_name} with params: {params}")
+            module_instance.initialize(params)
+        else:
+            logger.debug(f"No initialize method found for {module_type} {module_name}")
+
+    return module_instance
+
 
 def load_source(source_name: str, params: Dict[str, Any]) -> DataSource:
     """Load and initialize the data source specified in the config."""
-    
+
     if not source_name:
         logger.error("Source name not specified in config")
         raise ValueError("Source name not specified in config")
-    
+
     try:
-        sources_module_path = "sources"
-        source_class_name = f"{source_name.capitalize()}Source"
-        source = try_load_module(source_name, module_path=f"{sources_module_path}.{source_name}", class_name=source_class_name)
-        if not source:
-            source = try_load_module(source_name, module_path=f"{sources_module_path}.{source_name}_source", class_name=source_class_name)
-        
-        if not source:
-            logger.error(f"Failed to find source {source_name}")
-            raise ImportError(f"Failed to find source {source_name}")
-        else:
-            if hasattr(source, "initialize"):
-                logger.info(f"Initializing {source_name}")
-                source.initialize(params)
-            else:
-                logger.debug(f"No initialize method found for {source_name}")
+        source_class = try_get_source_class(source_name)
+        source = try_instantiate_module(
+            module_type="source",
+            module_name=source_name,
+            module_class=source_class,
+            params=params)
 
         return source
 
@@ -205,23 +299,14 @@ def load_target(target_name: str, params: Dict[str, Any]) -> DataTarget:
     if not target_name:
         logger.error("Target name not specified in config")
         raise ValueError("Target name not specified in config")
-    
+
     try:
-        targets_module_path = "targets"
-        target_class_name = f"{target_name.capitalize()}Target"
-        target = try_load_module(target_name, module_path=f"{targets_module_path}.{target_name}", class_name=target_class_name)
-        if not target:
-            target = try_load_module(target_name, module_path=f"{targets_module_path}.{target_name}_target", class_name=target_class_name)
-        
-        if not target:
-            logger.error(f"Failed to find target {target_name}")
-            raise ImportError(f"Failed to find target {target_name}")
-        else:
-            if hasattr(target, "initialize"):
-                logger.info(f"Initializing target: {target_name}")
-                target.initialize(params)
-            else:
-                logger.debug(f"No initialize method found for {target_name}")
+        target_class = try_get_target_class(target_name)
+        target = try_instantiate_module(
+            module_type="target",
+            module_name=target_name,
+            module_class=target_class,
+            params=params)
 
         return target
     except Exception as e:
@@ -230,25 +315,13 @@ def load_target(target_name: str, params: Dict[str, Any]) -> DataTarget:
 
 def load_transformation(transformation_name: str, params: Dict[str, Any]) -> Transformation:
     """Load and initialize the transformation specified in the config."""
-    if not transformation_name:
-        logger.warning("No transformation specified, using identity transformation")
-        transformation_name = "identity"
-        params = {}
-        
     try:
-        transformations_module_path = "transformers"
-        transformation_class_name = f"{transformation_name.capitalize()}Transformation"
-        transformation = try_load_module(transformation_name, module_path=f"{transformations_module_path}.{transformation_name}", class_name=transformation_class_name)
-        if not transformation:
-            logger.error(f"Failed to find transformation {transformation_name}")
-            raise ImportError(f"Failed to find transformation {transformation_name}")
-        else:
-            if hasattr(transformation, "initialize"):
-                logger.info(f"Initializing transformation: {transformation_name}")
-                transformation.initialize(params)
-            else:
-                logger.debug(f"No initialize method found for {transformation_name}")
-
+        transformation_class = try_get_transformation_class(transformation_name)
+        transformation = try_instantiate_module(
+            module_type="transformation",
+            module_name=transformation_name,
+            module_class=transformation_class,
+            params=params)
         return transformation
     except Exception as e:
         logger.error(f"Failed to load transformation {transformation_name}: {e}")
@@ -277,7 +350,7 @@ class ETLController:
                 self._load_target()
             if self.transformation is None or force_reload:
                 self._load_transformation()
-            
+
             return self.source, self.target, self.transformation
         except Exception as e:
             logger.error(f"Failed to load all modules: {e}")
@@ -288,31 +361,31 @@ class ETLController:
         source_params = self.config.get('source', {}).get('params', {})
         self.source = load_source(source_name, source_params)
         return self.source
-    
+
     def _load_target(self) -> DataTarget:
         """Load and initialize the data target specified in the config."""
         target_name = self.config.get('target', {}).get('name')
         target_params = self.config.get('target', {}).get('params', {})
         self.target = load_target(target_name, target_params)
         return self.target
-    
+
     def _load_transformation(self) -> Transformation:
         """Load and initialize the transformation specified in the config."""
         transformation_name = self.config.get('transformation', {}).get('name')
         transformation_params = self.config.get('transformation', {}).get('params', {})
         self.transformation = load_transformation(transformation_name, transformation_params)
         return self.transformation
-    
+
     def run(self) -> int:
         """Execute the ETL process based on the configuration."""
         processed_count = 0
         error_count = 0
-        
+
         try:
             logger.info("Starting ETL process")
-            
+
             self._load_all_modules()
-            
+
             # Get entries from source
             logger.info("Retrieving entries from source")
             try:
@@ -321,37 +394,37 @@ class ETLController:
             except Exception as e:
                 logger.error(f"Error retrieving entries from source: {e}")
                 return 0
-            
+
             # Process each entry
             for i, source_entry in enumerate(source_entries):
                 try:
                     # Transform entry
                     transformed_entry = self.transformation.transform(source_entry)
-                    
+
                     # Create entry in target
                     self.target.create_entries([transformed_entry])
                     processed_count += 1
-                    
+
                     # Log progress for every 100 entries
                     if processed_count % 100 == 0:
                         logger.info(f"Processed {processed_count} entries")
                 except Exception as e:
                     error_count += 1
                     logger.error(f"Error processing entry {i}: {e}")
-            
+
             logger.info(f"ETL process completed. Processed: {processed_count}, Errors: {error_count}")
             return processed_count
-        
+
         except Exception as e:
             logger.error(f"ETL process failed: {e}")
             raise
-        
+
         finally:
             # Clean up resources
             if self.source:
                 logger.info("Closing source connection")
                 self.source.close()
-            
+
             if self.target:
                 logger.info("Closing target connection")
                 self.target.close()
@@ -359,15 +432,15 @@ class ETLController:
 def main():
     """Main entry point for the ETL controller."""
     parser = argparse.ArgumentParser(description='ETL Controller')
-    parser.add_argument('--config', '-c', 
+    parser.add_argument('--config', '-c',
                        default=CONF_FILE_PATH,
                        help='Path to configuration file')
     parser.add_argument('--log-file', '-l',
                        default=LOG_FILE_PATH,
                        help='Path to log file')
-    
+
     args = parser.parse_args()
-    
+
     # Configure logging if log file specified
     if args.log_file:
         logging.basicConfig(
@@ -375,9 +448,9 @@ def main():
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
-    
+
     controller = ETLController(args.config)
-    
+
     try:
         processed_count = controller.run()
         print(f"Successfully processed {processed_count} entries")

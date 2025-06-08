@@ -12,15 +12,20 @@ def minimal_valid_config():
     """Minimal valid configuration."""
     return {
         "source": {
-            "name": "test_source",
+            "name": "test",
             "params": {}
         },
         "target": {
-            "name": "test_target",
+            "name": "test",
             "params": {}
         },
-        "mapping": {
-            "target_field": "source_field"
+        "transformation": {
+            "name": "map",
+            "params": {
+                "mapping": {
+                    "target_field": "source_field",
+                }
+            },
         }
     }
 
@@ -59,21 +64,19 @@ def test_minimal_valid_config(minimal_valid_config):
         yaml.dump(minimal_valid_config, config_file)
         config_path = config_file.name
     
-    try:
-        controller = ETLController(config_path)
-        assert controller.config == minimal_valid_config
-    finally:
-        if os.path.exists(config_path):
-            os.remove(config_path)
+        try:
+            controller = ETLController(config_path)
+            assert controller.config == minimal_valid_config
+        finally:
+            if os.path.exists(config_path):
+                os.remove(config_path)
 
 
-def test_missing_source_config():
+def test_missing_source_config(minimal_valid_config):
     """Test config validation with missing source section."""
-    config = {
-        "target": {"name": "test_target", "params": {}},
-        "mapping": {"target_field": "source_field"}
-    }
-    
+    config = minimal_valid_config.copy()
+    config.pop("source")
+
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as config_file:
         yaml.dump(config, config_file)
         config_path = config_file.name
@@ -87,12 +90,11 @@ def test_missing_source_config():
             os.remove(config_path)
 
 
-def test_missing_target_config():
+def test_missing_target_config(minimal_valid_config):
     """Test config validation with missing target section."""
-    config = {
-        "source": {"name": "test_source", "params": {}},
-        "mapping": {"target_field": "source_field"}
-    }
+    config = minimal_valid_config.copy()
+    config.pop("target")
+
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as config_file:
         yaml.dump(config, config_file)
@@ -107,12 +109,10 @@ def test_missing_target_config():
             os.remove(config_path)
 
 
-def test_missing_mapping_config():
+def test_missing_mapping_config(minimal_valid_config):
     """Test config validation with missing mapping section."""
-    config = {
-        "source": {"name": "test_source", "params": {}},
-        "target": {"name": "test_target", "params": {}}
-    }
+    config = minimal_valid_config.copy()
+    config.pop("transformation")
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as config_file:
         yaml.dump(config, config_file)
@@ -138,10 +138,12 @@ def test_invalid_yaml_format():
       name: test_target
       params: {}
     """
-    
-    mock_file = mock_open(read_data=invalid_yaml)
-    with patch('builtins.open', mock_file), pytest.raises(yaml.YAMLError):
-        ETLController("config.yml")
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as config_file:
+        config_file.write(invalid_yaml)
+        config_path = config_file.name
+        with pytest.raises(ValueError):
+            ETLController(config_path)
 
 
 def test_empty_config_file():
