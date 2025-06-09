@@ -355,13 +355,21 @@ class ETLController:
                  target: DataTarget = None):
         """Initialize the ETL controller with a configuration file path."""
         logger.info(f"Initializing ETL controller with config: {config_path}")
-        self.source = source
-        self.transformation = transformation
-        self.target = target
+        self.source = None
+        self.transformation = None
+        self.target = None
         self.polling_frequency = polling_frequency
 
-        if any([source, transformation, target]) and self.polling_frequency is None:
-            self.polling_frequency = DEFAULT_POLLING_FREQUENCY_SECONDS
+        if any([source, transformation, target]):
+            logger.info("Using provided source, transformation, and target modules")
+            if not all([source, transformation, target]):
+                raise ValueError("If any of source, transformation, or target is provided, all must be provided")
+            self.source = source
+            self.transformation = transformation
+            self.target = target
+
+            if self.polling_frequency is None:
+                self.polling_frequency = DEFAULT_POLLING_FREQUENCY_SECONDS
 
         self.config = None
         if not any([self.source, self.transformation, self.target]):
@@ -407,8 +415,6 @@ class ETLController:
                 if self.config:
                     logger.info("Re-loading all modules from configuration")
                     self._load_all_modules()
-
-                logger.error(f"XXXX Source: {self.source}, Target: {self.target}, Transformation: {self.transformation}")
 
                 # Pull data from source and push to target
                 processed_count = self.process_cycle()

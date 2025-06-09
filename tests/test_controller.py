@@ -633,3 +633,71 @@ def test_run_repeats_longer_on_positive_polling(sample_config_dict):
     finally:
         if os.path.exists(config_path):
             os.remove(config_path)
+
+# --- Custom classes for external injection tests ---
+class ExternalSource:
+    def __init__(self):
+        self.initialized = False
+        self.closed = False
+        self.init_params = None
+        self.entries = [
+            {"id": 1, "val": "A"},
+            {"id": 2, "val": "B"}
+        ]
+    def initialize(self, config):
+        self.initialized = True
+        self.init_params = config
+    def get_entries(self):
+        return self.entries
+    def close(self):
+        self.closed = True
+
+class ExternalTransformation:
+    def __init__(self):
+        self.initialized = False
+        self.init_params = None
+    def initialize(self, config):
+        self.initialized = True
+        self.init_params = config
+    def transform(self, entry):
+        # Just add a new field
+        return {**entry, "transformed": True}
+
+class ExternalTarget:
+    def __init__(self):
+        self.initialized = False
+        self.closed = False
+        self.init_params = None
+        self.entries = []
+    def initialize(self, config):
+        self.initialized = True
+        self.init_params = config
+    def create_entries(self, entries):
+        self.entries.extend(entries)
+    def close(self):
+        self.closed = True
+
+def test_etlcontroller_with_external_classes():
+    """Test ETLController with externally supplied classes not in sources/targets/transformers."""
+    source = ExternalSource()
+    transformation = ExternalTransformation()
+    target = ExternalTarget()
+    # Manually initialize (mimic what ETLController expects)
+    source.initialize({"foo": "bar"})
+    transformation.initialize({})
+    target.initialize({})
+    controller = ETLController(
+        config_path=None,
+        source=source,
+        transformation=transformation,
+        target=target,
+        polling_frequency=0
+    )
+    controller.run()
+    # Check that entries were processed and transformed
+    assert target.entries == [
+        {"id": 1, "val": "A", "transformed": True},
+        {"id": 2, "val": "B", "transformed": True},
+    ]
+    assert source.closed
+    assert target.closed
