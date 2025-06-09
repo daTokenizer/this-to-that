@@ -10,6 +10,7 @@ from controller import ETLController, MISSING_DATA_DEFAULT_VALUE
 from transformers.identity import IdentityTransformation
 from transformers.map import MapTransformation
 from sources.test import TestSource as MockSource
+import time
 
 
 def sample_source_entry_generator(source_id: str = None, name: str = None, ip: str = None, score: float = None):
@@ -539,4 +540,96 @@ def test_run_with_transformation_error(sample_config_dict):
         assert controller.target.closed  # Target was closed properly
     finally:
         if os.path.exists(config_path):
-            os.remove(config_path) 
+            os.remove(config_path)
+
+
+def test_run_halts_on_zero_polling(sample_config_dict):
+    """Test ETLController halts after one cycle if polling_frequency is 0."""
+    config_dict, sample_entries = populate_source_entries(sample_config_dict, 2)
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as config_file:
+        yaml.dump(config_dict, config_file)
+        config_path = config_file.name
+
+    try:
+        controller = ETLController(config_path, polling_frequency=0)
+        with patch.object(controller, 'process_cycle', wraps=controller.process_cycle) as mock_cycle, \
+             patch('time.sleep') as mock_sleep:
+            controller.run()
+            assert mock_cycle.call_count == 1
+            mock_sleep.assert_not_called()
+    finally:
+        if os.path.exists(config_path):
+            os.remove(config_path)
+
+def test_run_halts_on_negative_polling(sample_config_dict):
+    """Test ETLController halts after one cycle if polling_frequency is negative."""
+    config_dict, sample_entries = populate_source_entries(sample_config_dict, 2)
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as config_file:
+        yaml.dump(config_dict, config_file)
+        config_path = config_file.name
+
+    try:
+        controller = ETLController(config_path, polling_frequency=-5)
+        with patch.object(controller, 'process_cycle', wraps=controller.process_cycle) as mock_cycle, \
+             patch('time.sleep') as mock_sleep:
+            controller.run()
+            assert mock_cycle.call_count == 1
+            mock_sleep.assert_not_called()
+    finally:
+        if os.path.exists(config_path):
+            os.remove(config_path)
+
+def test_run_repeats_on_positive_polling(sample_config_dict):
+    """Test ETLController repeats run if polling_frequency is positive."""
+    config_dict, sample_entries = populate_source_entries(sample_config_dict, 2)
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as config_file:
+        yaml.dump(config_dict, config_file)
+        config_path = config_file.name
+
+    try:
+        controller = ETLController(config_path, polling_frequency=1)
+        # Patch process_cycle to break after 2 cycles
+        call_counter = {'count': 0}
+        orig_process_cycle = controller.process_cycle
+        def limited_cycle():
+            call_counter['count'] += 1
+            if call_counter['count'] >= 2:
+                # Set polling_frequency to 0 to break loop after 2nd cycle
+                controller.polling_frequency = 0
+            return orig_process_cycle()
+        with patch.object(controller, 'process_cycle', side_effect=limited_cycle) as mock_cycle, \
+             patch('time.sleep') as mock_sleep:
+            controller.run()
+            assert mock_cycle.call_count == 2
+            mock_sleep.assert_called_once_with(1)
+    finally:
+        if os.path.exists(config_path):
+            os.remove(config_path)
+
+def test_run_repeats_longer_on_positive_polling(sample_config_dict):
+    """Test ETLController repeats run if polling_frequency is positive."""
+    config_dict, sample_entries = populate_source_entries(sample_config_dict, 2)
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as config_file:
+        yaml.dump(config_dict, config_file)
+        config_path = config_file.name
+
+    try:
+        expected_cycles = 10
+        controller = ETLController(config_path, polling_frequency=1)
+        # Patch process_cycle to break after 2 cycles
+        call_counter = {'count': 0}
+        orig_process_cycle = controller.process_cycle
+        def limited_cycle():
+            call_counter['count'] += 1
+            if call_counter['count'] >= expected_cycles:
+                # Set polling_frequency to 0 to break loop after 2nd cycle
+                controller.polling_frequency = 0
+            return orig_process_cycle()
+        with patch.object(controller, 'process_cycle', side_effect=limited_cycle) as mock_cycle, \
+             patch('time.sleep') as mock_sleep:
+            controller.run()
+            assert mock_cycle.call_count == expected_cycles
+            assert mock_sleep.call_count == expected_cycles - 1 # Should sleep between cycles
+    finally:
+        if os.path.exists(config_path):
+            os.remove(config_path)

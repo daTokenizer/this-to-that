@@ -358,7 +358,10 @@ class ETLController:
         self.source = source
         self.transformation = transformation
         self.target = target
-        self.polling_frequency = polling_frequency if any([polling_frequency, source, transformation, target]) else DEFAULT_POLLING_FREQUENCY_SECONDS
+        self.polling_frequency = polling_frequency
+
+        if any([source, transformation, target]) and self.polling_frequency is None:
+            self.polling_frequency = DEFAULT_POLLING_FREQUENCY_SECONDS
 
         self.config = None
         if not any([self.source, self.transformation, self.target]):
@@ -367,10 +370,16 @@ class ETLController:
                 raise ValueError("No configuration file path provided and no modules specified")
 
             self.config = load_config(config_path)
-            if self.polling_frequency is None:
-                self.polling_frequency = self.config.get('polling_frequency_minutes', DEFAULT_POLLING_FREQUENCY_SECONDS)
             if not self.config or not validate_config(self.config):
                 raise ValueError("Empty or Invalid Configuration Found, halting.")
+            logger.debug(f"Loaded configuration: {self.config}")
+
+            if self.polling_frequency is None:
+                self.polling_frequency = self.config.get('polling_frequency_seconds', DEFAULT_POLLING_FREQUENCY_SECONDS)
+
+
+        if self.polling_frequency is None:
+            self.polling_frequency = DEFAULT_POLLING_FREQUENCY_SECONDS
 
 
     def _load_all_modules(self, force_reload: bool = False) -> Tuple[DataSource, DataTarget, Transformation]:
@@ -400,18 +409,17 @@ class ETLController:
                     self._load_all_modules()
 
                 logger.error(f"XXXX Source: {self.source}, Target: {self.target}, Transformation: {self.transformation}")
-                # XXXX this function fails for some reason, but calling process_cycle directly works
+
                 # Pull data from source and push to target
                 processed_count = self.process_cycle()
                 logger.info(f"ETL process completed successfully. Processed {processed_count} entries.")
                 # Wait for the next polling interval
-                # if self.polling_frequency <= 0:
-                #     logger.warning("Polling frequency is set to 0 or negative, exiting ETL process")
-                #     break
-                # else:
-                #     logger.info(f"Waiting for {self.polling_frequency} seconds before next run")
-                #     time.sleep(self.polling_frequency)
-                break
+                if self.polling_frequency is None or self.polling_frequency <= 0:
+                    logger.warning("Polling frequency is set to 0 or negative, exiting ETL process")
+                    break
+                else:
+                    logger.info(f"Waiting for {self.polling_frequency} seconds ({self.polling_frequency/60}) min before next run")
+                    time.sleep(self.polling_frequency)
 
         except Exception as e:
             logger.error(f"ETL process failed: {e}")
