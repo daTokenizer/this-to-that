@@ -3,6 +3,7 @@ import logging
 import argparse
 import json
 import sys
+import time
 from symtable import Class
 
 import yaml
@@ -14,6 +15,7 @@ LOG_FILE_PATH = "etl_controller.log"
 MISSING_DATA_DEFAULT_VALUE = None
 FIXED_CUSTOM_VALUE_KEY = "FIXED_CUSTOM_VALUE"
 DEFAULT_TRANSFORMATION_NAME = "identity"
+DEFAULT_POLLING_FREQUENCY_SECONDS = 15 * 60  # Default polling frequency in seconds (15 minutes)
 
 # Configure logging
 logging.basicConfig(
@@ -97,7 +99,6 @@ def validate_config_structure(config: Dict[str, Any]) -> bool:
     if not config:
         return False
 
-    
     # TODO: additional validations , including mandatory fields, etc.
     source = config.get('source')
     if not source:
@@ -161,7 +162,6 @@ def validate_config(config: Dict[str, Any]) -> bool:
         logger.error("Invalid configuration structure")
         return False
 
-    logger.error(f"XXX {config}")
     if not validate_modules_exist(config):
         logger.error("Required modules do not exist")
         return False
@@ -327,64 +327,110 @@ def load_transformation(transformation_name: str, params: Dict[str, Any]) -> Tra
         logger.error(f"Failed to load transformation {transformation_name}: {e}")
         raise ImportError(f"Failed to load transformation {transformation_name}: {e}")
 
+def load_source_from_config(config) -> DataSource:
+    source_name = config.get('source', {}).get('name')
+    source_params = config.get('source', {}).get('params', {})
+    return load_source(source_name, source_params)
+
+def load_transformation_from_config(config) -> Transformation:
+    """Load and initialize the transformation specified in the config."""
+    transformation_name = config.get('transformation', {}).get('name')
+    transformation_params = config.get('transformation', {}).get('params', {})
+    return load_transformation(transformation_name, transformation_params)
+
+def load_target_from_config(config) -> DataTarget:
+    """Load and initialize the data target specified in the config."""
+    target_name = config.get('target', {}).get('name')
+    target_params = config.get('target', {}).get('params', {})
+
+    return load_target(target_name, target_params)
+
 
 class ETLController:
     """Controller for ETL operations."""
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str,
+                 polling_frequency: int = None,
+                 source: DataSource = None,
+                 transformation: Transformation = None,
+                 target: DataTarget = None):
         """Initialize the ETL controller with a configuration file path."""
         logger.info(f"Initializing ETL controller with config: {config_path}")
-        self.config_path = config_path
-        self.config = load_config(config_path)
-        if not self.config or not validate_config(self.config):
-            raise ValueError("Empty or Invalid Configuration Found, halting.")
-        self.source = None
-        self.target = None
-        self.transformation = None
+        self.source = source
+        self.transformation = transformation
+        self.target = target
+        self.polling_frequency = polling_frequency if any([polling_frequency, source, transformation, target]) else DEFAULT_POLLING_FREQUENCY_SECONDS
+
+        self.config = None
+        if not any([self.source, self.transformation, self.target]):
+            logger.info("No source, transformation, or target provided, loading from config")
+            if not config_path:
+                raise ValueError("No configuration file path provided and no modules specified")
+
+            self.config = load_config(config_path)
+            if self.polling_frequency is None:
+                self.polling_frequency = self.config.get('polling_frequency_minutes', DEFAULT_POLLING_FREQUENCY_SECONDS)
+            if not self.config or not validate_config(self.config):
+                raise ValueError("Empty or Invalid Configuration Found, halting.")
+
 
     def _load_all_modules(self, force_reload: bool = False) -> Tuple[DataSource, DataTarget, Transformation]:
         # Load and initialize source, target, and transformation
         try:
             if self.source is None or force_reload:
-                self._load_source()
-            if self.target is None or force_reload:
-                self._load_target()
+                self.source = load_source_from_config(config=self.config)
             if self.transformation is None or force_reload:
-                self._load_transformation()
+                self.transformation = load_transformation_from_config(self.config)
+            if self.target is None or force_reload:
+                self.target = load_target_from_config(config=self.config)
 
+            logger.debug(f"Source: {self.source}, Target: {self.target}, Transformation: {self.transformation}")
             return self.source, self.target, self.transformation
         except Exception as e:
             logger.error(f"Failed to load all modules: {e}")
             raise
 
-    def _load_source(self) -> DataSource:
-        source_name = self.config.get('source', {}).get('name')
-        source_params = self.config.get('source', {}).get('params', {})
-        self.source = load_source(source_name, source_params)
-        return self.source
+    def run(self):
+        """Run the ETL process."""
+        logger.info("Running ETL process")
+        try:
+            while True:
+                # Load source, target, and transformation modules
+                if self.config:
+                    logger.info("Re-loading all modules from configuration")
+                    self._load_all_modules()
 
-    def _load_target(self) -> DataTarget:
-        """Load and initialize the data target specified in the config."""
-        target_name = self.config.get('target', {}).get('name')
-        target_params = self.config.get('target', {}).get('params', {})
-        self.target = load_target(target_name, target_params)
-        return self.target
+                logger.error(f"XXXX Source: {self.source}, Target: {self.target}, Transformation: {self.transformation}")
+                # XXXX this function fails for some reason, but calling process_cycle directly works
+                # Pull data from source and push to target
+                processed_count = self.process_cycle()
+                logger.info(f"ETL process completed successfully. Processed {processed_count} entries.")
+                # Wait for the next polling interval
+                # if self.polling_frequency <= 0:
+                #     logger.warning("Polling frequency is set to 0 or negative, exiting ETL process")
+                #     break
+                # else:
+                #     logger.info(f"Waiting for {self.polling_frequency} seconds before next run")
+                #     time.sleep(self.polling_frequency)
+                break
 
-    def _load_transformation(self) -> Transformation:
-        """Load and initialize the transformation specified in the config."""
-        transformation_name = self.config.get('transformation', {}).get('name')
-        transformation_params = self.config.get('transformation', {}).get('params', {})
-        self.transformation = load_transformation(transformation_name, transformation_params)
-        return self.transformation
+        except Exception as e:
+            logger.error(f"ETL process failed: {e}")
+            raise
+        finally:
+            # Clean up resources
+            if self.source:
+                self.source.close()
+            if self.target:
+                self.target.close()
 
-    def run(self) -> int:
+
+    def process_cycle(self) -> int:
         """Execute the ETL process based on the configuration."""
         processed_count = 0
         error_count = 0
 
         try:
-            logger.info("Starting ETL process")
-
-            self._load_all_modules()
+            logger.info("Starting cycle of ETL process")
 
             # Get entries from source
             logger.info("Retrieving entries from source")

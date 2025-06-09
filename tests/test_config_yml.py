@@ -210,7 +210,7 @@ def test_complex_mapping(sample_config_dict):
     
     try:
         controller = ETLController(config_path)
-        controller._load_transformation()
+        controller._load_all_modules()
         
         # Test mapping with direct field
         source_entry = {"source_field1": "value1", "extra": "not_mapped"}

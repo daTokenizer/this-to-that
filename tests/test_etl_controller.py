@@ -27,9 +27,7 @@ def test_etl_controller_setup(sample_config_dict):
         config_path = config_file.name
         try:
             controller = ETLController(config_path)
-            controller._load_source()
-            controller._load_target()
-            controller._load_transformation()
+            controller._load_all_modules()
 
             assert controller.source is not None
             assert isinstance(controller.source, DataSource)

@@ -47,7 +47,6 @@ def test_init_loads_config(sample_config_dict):
     
         controller = ETLController(config_path)
         assert controller.config == sample_config_dict
-        assert controller.config_path == config_path
     
     # Cleanup
     if os.path.exists(config_path):
@@ -83,7 +82,7 @@ def test_load_source(sample_config_dict):
     
     try:
         controller = ETLController(config_path)
-        controller._load_source()
+        controller._load_all_modules()
         
         # Verify module was imported correctly
         # TODO: assert_called_with("sources.test")
@@ -106,7 +105,7 @@ def test_load_target(sample_config_dict):
     
     try:
         controller = ETLController(config_path)
-        controller._load_target()
+        controller._load_all_modules()
         
         # Verify module was imported correctly
         # TODO: assert_called_with("targets.test")
@@ -129,7 +128,7 @@ def test_map_entry(sample_config_dict):
     
     try:
         controller = ETLController(config_path)
-        controller._load_transformation()
+        controller._load_all_modules()
         source_entry = {
             "source_id": "123",
             "name": "Test Device",
@@ -160,13 +159,12 @@ def test_run_successful(sample_config_dict):
         controller = ETLController(config_path)
         
         # Run the ETL process
-        processed_count = controller.run()
+        controller.run()
         
         # Verify results
         source = controller.source
         target = controller.target
-        assert processed_count == 2  # Two entries were processed
-        assert len(target.entries) == 2
+        assert len(target.entries) == 2  # Two entries were processed
         assert target.entries[0]["target_id"] == sample_entries[0]["source_id"]
         assert target.entries[1]["target_id"] == sample_entries[1]["source_id"]
         assert source.closed  # Source was closed properly
@@ -211,14 +209,14 @@ def test_run_handles_source_error(sample_config_dict):
             controller._load_all_modules()
             controller.source.get_entries = Mock(side_effect=Exception("some error"))
 
-            entries_processed_count = controller.run()
+            controller.run()
             
             # Verify source was closed even though there was an error
             assert controller.source is not None
             assert controller.transformation is not None
             assert controller.target is not None
-    
-            assert entries_processed_count == 0
+
+            assert len(controller.target.entries) == 0
         finally:
             if os.path.exists(config_path):
                 os.remove(config_path)
@@ -236,14 +234,14 @@ def test_run_handles_transformation_error(sample_config_dict):
             controller.source.get_entries = Mock(return_value=entries)
             controller.transformation.transform = Mock(side_effect=Exception("some error"))
 
-            entries_processed_count = controller.run()
+            controller.run()
             
             # Verify source was closed even though there was an error
             assert controller.source is not None
             assert controller.transformation is not None
             assert controller.target is not None
-    
-            assert entries_processed_count == 0
+            assert len(controller.target.entries) == 0
+
         finally:
             if os.path.exists(config_path):
                 os.remove(config_path)
@@ -263,14 +261,14 @@ def test_run_handles_target_error(sample_config_dict):
             controller.source.get_entries = Mock(return_value=entries)
             controller.target.create_entries = Mock(side_effect=Exception("some error"))
 
-            entries_processed_count = controller.run()
+            controller.run()
             
             # Verify source was closed even though there was an error
             assert controller.source is not None
             assert controller.transformation is not None
             assert controller.target is not None
     
-            assert entries_processed_count == 0
+            assert len(controller.target.entries) == 0
         finally:
             if os.path.exists(config_path):
                 os.remove(config_path)
@@ -289,7 +287,7 @@ def test_run_handles_processing_error(sample_config_dict):
 
         
         # Make target.create_entries fail on the second entry
-        controller._load_target() # force load target before manipulating it
+        controller._load_all_modules() # force load target before manipulating it
         original_create_entries = controller.target.create_entries
         call_count = 0
         
@@ -303,10 +301,9 @@ def test_run_handles_processing_error(sample_config_dict):
         controller.target.create_entries = failing_create_entries
         
         # Run should proceed despite the error
-        processed_count = controller.run()
+        controller.run()
         
         # Verify results
-        assert processed_count == total_entries - 1 
         assert len(controller.target.entries) == total_entries - 1
         assert controller.source.closed  # Source was closed properly
         assert controller.target.closed  # Target was closed properly
@@ -323,7 +320,7 @@ def test_map_entry_missing_source_field(sample_config_dict):
     
     try:
         controller = ETLController(config_path)
-        controller._load_transformation()
+        controller._load_all_modules()
         
         source_entry = {
             "source_id": "123",
@@ -357,7 +354,7 @@ def test_load_transformation_identity(sample_config_dict):
     
     try:
         controller = ETLController(config_path)
-        controller._load_transformation()
+        controller._load_all_modules()
         
         assert isinstance(controller.transformation, IdentityTransformation)
     finally:
@@ -383,7 +380,7 @@ def test_load_transformation_map(sample_config_dict):
     
     try:
         controller = ETLController(config_path)
-        controller._load_transformation()
+        controller._load_all_modules()
         
         assert isinstance(controller.transformation, MapTransformation)
         assert controller.transformation.mapping == config_dict["transformation"]["params"]["mapping"]
@@ -404,7 +401,7 @@ def test_load_transformation_default(sample_config_dict):
     
     try:
         controller = ETLController(config_path)
-        controller._load_transformation()
+        controller._load_all_modules()
         
         assert isinstance(controller.transformation, IdentityTransformation)
     finally:
@@ -450,9 +447,8 @@ def test_run_with_identity_transformation(sample_config_dict):
     
     try:
         controller = ETLController(config_path)
-        processed_count = controller.run()
-        
-        assert processed_count == 2
+        controller.run()
+
         actual_entries = controller.target.entries
         assert len(actual_entries) == 2
         # Verify entries were passed through unchanged
@@ -484,9 +480,8 @@ def test_run_with_map_transformation(sample_config_dict):
     
     try:
         controller = ETLController(config_path)
-        processed_count = controller.run()
-        
-        assert processed_count == 2
+        controller.run()
+
         actual_entries = controller.target.entries
         assert len(actual_entries) == 2
         # Verify entries were mapped correctly
@@ -521,7 +516,7 @@ def test_run_with_transformation_error(sample_config_dict):
     
     try:
         controller = ETLController(config_path)
-        controller._load_transformation()
+        controller._load_all_modules()
         
         # Make transformation.transform fail
         original_transform = controller.transformation.transform
@@ -536,9 +531,8 @@ def test_run_with_transformation_error(sample_config_dict):
         controller.transformation.transform = failing_transform
         
         # Run should handle the error and continue
-        processed_count = controller.run()
+        controller.run()
         
-        assert processed_count == total_entries - 1 
         actual_entries = controller.target.entries
         assert len(actual_entries) == total_entries - 1
         assert controller.source.closed  # Source was closed properly

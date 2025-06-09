@@ -47,6 +47,7 @@ def sample_config():
 @pytest.fixture
 def sample_config_dict():
     return {
+        "polling_frequency_seconds": -1,
         "source": {
             "name": "test",
             "params": {
